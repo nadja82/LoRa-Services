@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# === Einstellungen ===
+PLACE_NAME="Waldfeucht"
+PLACE_LONG="Waldfeucht, Kreis Heinsberg"
+LAT="51.07139"
+LON="5.98306"
+TIMEZONE="Europe/Berlin"
+PORT="/dev/ttyUSB0"
+CH_INDEX="2"
+
+# === Begrüßungen und Abschiede ===
+greetings=(
+  "Hallo, wie geht’s?"
+  "Guten Tag!"
+  "Moin aus der Wetterküche!"
+  "Einen sonnigen Tag wünsche ich!"
+  "Grüße vom Wetterdienst!"
+  "Hi, Wetter freudig?"
+  "Servus vom Wetterteam!"
+  "Regenschauer incoming... fast!"
+  "Achtung, Wetter nah!"
+  "Bereit für die Wettervorhersage?"
+)
+farewells=(
+  "Bis später, Wolkenstreichler!"
+  "Tschüss, wetterfest bleiben!"
+  "Ciao, Sonne im Herzen!"
+  "Bleib trocken!"
+  "Grüße, vom Wetter"
+  "Bis zum nächsten Wettergruß!"
+  "Auf Wiederhören, Regencheck!"
+  "Mach’s gut, Wetterfreund!"
+  "Adieu, mit Wind im Rücken!"
+  "Tschau, wettersicher!"
+)
+
+# Zufällige Auswahlfunktion
+select_random() {
+  local arr=("${!1}")
+  local idx=$(( RANDOM % ${#arr[@]} ))
+  echo "${arr[$idx]}"
+}
+
+# Begrüßung
+GREETING="$(select_random greetings[@])"
+
+# === Wetterdaten abrufen ===
+API="https://api.open-meteo.com/v1/forecast"
+DAILY_VARS="weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max"
+JSON="$(curl -sS --fail "$API?latitude=${LAT}&longitude=${LON}&daily=${DAILY_VARS}&timezone=${TIMEZONE}&forecast_days=1")"
+
+WX_CODE=$(jq -r '.daily.weathercode[0]' <<<"$JSON")
+TMAX=$(jq -r '.daily.temperature_2m_max[0]' <<<"$JSON")
+TMIN=$(jq -r '.daily.temperature_2m_min[0]' <<<"$JSON")
+PRCP=$(jq -r '.daily.precipitation_probability_max[0]' <<<"$JSON")
+WIND=$(jq -r '.daily.wind_speed_10m_max[0]' <<<"$JSON")
+
+case "$WX_CODE" in
+  0)  icon="☀️"; text="Sonnig";;
+  1|2|3) icon="⛅"; text="Wolkig";;
+  45|48) icon="🌫️"; text="Nebel";;
+  51|53|55) icon="🌦️"; text="Niesel";;
+  61|63|65) icon="🌧️"; text="Regen";;
+  80|81|82) icon="🌧️"; text="Schauer";;
+  71|73|75|77|85|86) icon="❄️"; text="Schnee";;
+  95|96|99) icon="⛈️"; text="Gewitter";;
+  *) icon="🌤️"; text="Wechselhaft";;
+esac
+
+MSG_BODY="$icon $PLACE_LONG: $text. Max ${TMAX}°C / Min ${TMIN}°C, Regenrisiko ${PRCP}%, Wind max ${WIND} km/h."
+
+# Abschied
+FAREWELL="$(select_random farewells[@])"
+
+# Gesamt-Nachricht
+MSG="$GREETING $MSG_BODY $FAREWELL"
+
+# Sender via Meshtastic
+sudo meshtastic --port "$PORT" --ch-index "$CH_INDEX" --sendtext "$MSG"
+
+# Log
+echo "$(date +"%F %T") | $MSG" >> "${HOME}/wetter_meshtastic.log"
+echo "Gesendet: $MSG"
