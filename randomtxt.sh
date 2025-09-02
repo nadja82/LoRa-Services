@@ -16,7 +16,7 @@ set -euo pipefail
 
 # Feste Einstellungen laut Anforderung
 PORT="/dev/ttyUSB0"
-CHANNEL_INDEX=3
+CHANNEL_INDEX=1
 
 # Eingabedatei (Argument 1) oder Standard
 TEXT_FILE="${1:-messages.txt}"
